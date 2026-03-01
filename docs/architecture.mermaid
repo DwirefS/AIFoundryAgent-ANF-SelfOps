@@ -1,0 +1,73 @@
+%% ANF Foundry SelfOps — Architecture Diagram
+%% Render at https://mermaid.live or in GitHub markdown
+
+graph TB
+    subgraph User["User / Application"]
+        U[Natural Language Request]
+    end
+
+    subgraph Foundry["Azure AI Foundry"]
+        A[Foundry Agent Service]
+        M[GPT-4o Model]
+        T[Thread + Run]
+        A --> M
+        A --> T
+    end
+
+    subgraph Tools["Function Calling Tools"]
+        D[Tool Executor<br/>Python]
+        D --> F1[list_volumes]
+        D --> F2[get_volume]
+        D --> F3[create_snapshot]
+        D --> F4[list_snapshots]
+        D --> F5[delete_snapshot]
+        D --> F6[resize_volume]
+        D --> F7[get_account_info]
+    end
+
+    subgraph ANF["Azure NetApp Files"]
+        SDK[azure-mgmt-netapp SDK]
+        ARM[ARM REST API<br/>management.azure.com]
+        ACC[ANF Account]
+        POOL[Capacity Pool]
+        VOL1[Volume: trading-data]
+        VOL2[Volume: risk-analytics]
+        VOL3[Volume: market-feeds]
+        SNAP1[Snapshot: pre-batch-0126]
+        SNAP2[Snapshot: daily-backup]
+
+        SDK --> ARM
+        ARM --> ACC
+        ACC --> POOL
+        POOL --> VOL1
+        POOL --> VOL2
+        POOL --> VOL3
+        VOL1 --> SNAP1
+        VOL1 --> SNAP2
+    end
+
+    subgraph Auth["Authentication"]
+        MI[Managed Identity /<br/>DefaultAzureCredential]
+        RBAC1[Azure AI User<br/>on Foundry Project]
+        RBAC2[Contributor<br/>on ANF Account]
+        MI --> RBAC1
+        MI --> RBAC2
+    end
+
+    U -->|"Take a snapshot of trading-data"| A
+    A -->|requires_action:<br/>create_snapshot| D
+    D -->|azure-mgmt-netapp| SDK
+    SDK -->|JSON result| D
+    D -->|tool_output| A
+    A -->|"Snapshot created successfully"| U
+
+    MI -.->|authenticates| A
+    MI -.->|authenticates| SDK
+
+    style U fill:#e3f2fd,stroke:#1565c0
+    style A fill:#fff3e0,stroke:#e65100
+    style M fill:#fff3e0,stroke:#e65100
+    style D fill:#e8f5e9,stroke:#2e7d32
+    style SDK fill:#fce4ec,stroke:#c62828
+    style ARM fill:#fce4ec,stroke:#c62828
+    style MI fill:#f3e5f5,stroke:#6a1b9a

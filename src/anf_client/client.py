@@ -1,0 +1,348 @@
+"""
+Azure NetApp Files Management Client Wrapper.
+
+Wraps the azure-mgmt-netapp SDK to provide clean, typed operations
+that the Foundry agent's function calling tools invoke. Each method
+returns a Pydantic model (from .models) serializable to JSON.
+
+Reference:
+  - SDK docs: https://learn.microsoft.com/python/api/azure-mgmt-netapp
+  - REST API:  https://learn.microsoft.com/rest/api/netapp
+  - Samples:   https://github.com/Azure-Samples/netappfiles-python-sdk-sample
+"""
+
+from __future__ import annotations
+
+import logging
+from typing import Optional
+
+from azure.identity import DefaultAzureCredential
+from azure.mgmt.netapp import NetAppManagementClient
+from azure.mgmt.netapp.models import Snapshot, VolumePatch
+
+from .models import AccountInfo, OperationResult, SnapshotInfo, VolumeInfo
+
+logger = logging.getLogger(__name__)
+
+
+class ANFClient:
+    """
+    High-level wrapper around the Azure NetApp Files Management SDK.
+
+    Provides the operations exposed as function tools to the Foundry agent:
+      - list_volumes, get_volume
+      - create_snapshot, list_snapshots, delete_snapshot
+      - resize_volume
+      - get_account_info
+    """
+
+    def __init__(
+        self,
+        subscription_id: str,
+        resource_group: str,
+        account_name: str,
+        pool_name: str,
+        credential: Optional[DefaultAzureCredential] = None,
+    ):
+        self.subscription_id = subscription_id
+        self.resource_group = resource_group
+        self.account_name = account_name
+        self.default_pool_name = pool_name
+
+        self._credential = credential or DefaultAzureCredential()
+        self._client = NetAppManagementClient(
+            credential=self._credential,
+            subscription_id=self.subscription_id,
+        )
+        logger.info(
+            "ANFClient initialized for account=%s, pool=%s, rg=%s",
+            account_name,
+            pool_name,
+            resource_group,
+        )
+
+    # ── Volume Operations ─────────────────────────────────────────────
+
+    def list_volumes(self, pool_name: Optional[str] = None) -> list[VolumeInfo]:
+        """
+        List all volumes in a capacity pool.
+
+        Args:
+            pool_name: Capacity pool name. Uses default if not specified.
+
+        Returns:
+            List of VolumeInfo objects.
+        """
+        pool = pool_name or self.default_pool_name
+        logger.info("Listing volumes: rg=%s, account=%s, pool=%s", self.resource_group, self.account_name, pool)
+
+        volumes = []
+        for vol in self._client.volumes.list(
+            resource_group_name=self.resource_group,
+            account_name=self.account_name,
+            pool_name=pool,
+        ):
+            volumes.append(
+                VolumeInfo.from_sdk(vol, self.resource_group, self.account_name, pool)
+            )
+
+        logger.info("Found %d volumes in pool %s", len(volumes), pool)
+        return volumes
+
+    def get_volume(self, volume_name: str, pool_name: Optional[str] = None) -> VolumeInfo:
+        """
+        Get detailed information about a specific volume.
+
+        Args:
+            volume_name: Name of the volume.
+            pool_name: Capacity pool name. Uses default if not specified.
+
+        Returns:
+            VolumeInfo object.
+        """
+        pool = pool_name or self.default_pool_name
+        logger.info("Getting volume: %s (pool=%s)", volume_name, pool)
+
+        vol = self._client.volumes.get(
+            resource_group_name=self.resource_group,
+            account_name=self.account_name,
+            pool_name=pool,
+            volume_name=volume_name,
+        )
+        return VolumeInfo.from_sdk(vol, self.resource_group, self.account_name, pool)
+
+    def resize_volume(
+        self, volume_name: str, new_size_gib: int, pool_name: Optional[str] = None
+    ) -> OperationResult:
+        """
+        Resize an ANF volume. ANF supports online resize — no downtime.
+
+        Args:
+            volume_name: Name of the volume to resize.
+            new_size_gib: New size in GiB (must be >= 100 GiB, multiples of 1 GiB).
+            pool_name: Capacity pool name. Uses default if not specified.
+
+        Returns:
+            OperationResult indicating success/failure.
+        """
+        pool = pool_name or self.default_pool_name
+        new_size_bytes = int(new_size_gib) * (1024**3)
+
+        logger.info("Resizing volume %s to %d GiB (%d bytes)", volume_name, new_size_gib, new_size_bytes)
+
+        # Validate minimum size
+        if new_size_gib < 100:
+            return OperationResult(
+                success=False,
+                operation="resize_volume",
+                resource_name=volume_name,
+                details="",
+                error=f"Minimum volume size is 100 GiB. Requested: {new_size_gib} GiB.",
+            )
+
+        try:
+            # Get current volume to report before/after
+            current = self._client.volumes.get(
+                resource_group_name=self.resource_group,
+                account_name=self.account_name,
+                pool_name=pool,
+                volume_name=volume_name,
+            )
+            old_size_bytes = current.usage_threshold or 0
+            old_size_gib = round(old_size_bytes / (1024**3), 2)
+
+            # Execute resize (long-running operation)
+            poller = self._client.volumes.begin_update(
+                resource_group_name=self.resource_group,
+                account_name=self.account_name,
+                pool_name=pool,
+                volume_name=volume_name,
+                body=VolumePatch(usage_threshold=new_size_bytes),
+            )
+            poller.result()  # Wait for completion
+
+            return OperationResult(
+                success=True,
+                operation="resize_volume",
+                resource_name=volume_name,
+                details=(
+                    f"Volume '{volume_name}' resized from {old_size_gib} GiB to {new_size_gib} GiB. "
+                    f"ANF volume resize is online — no downtime required."
+                ),
+            )
+        except Exception as e:
+            logger.error("Failed to resize volume %s: %s", volume_name, str(e))
+            return OperationResult(
+                success=False,
+                operation="resize_volume",
+                resource_name=volume_name,
+                details="",
+                error=str(e),
+            )
+
+    # ── Snapshot Operations ───────────────────────────────────────────
+
+    def create_snapshot(
+        self,
+        volume_name: str,
+        snapshot_name: str,
+        pool_name: Optional[str] = None,
+    ) -> OperationResult:
+        """
+        Create a snapshot of an ANF volume.
+
+        ANF snapshots are instant, space-efficient (redirect-on-write),
+        and have zero performance impact on the volume.
+
+        Args:
+            volume_name: Name of the volume to snapshot.
+            snapshot_name: Name for the new snapshot.
+            pool_name: Capacity pool name. Uses default if not specified.
+
+        Returns:
+            OperationResult indicating success/failure.
+        """
+        pool = pool_name or self.default_pool_name
+        logger.info("Creating snapshot '%s' on volume '%s'", snapshot_name, volume_name)
+
+        try:
+            # Get volume to determine location
+            vol = self._client.volumes.get(
+                resource_group_name=self.resource_group,
+                account_name=self.account_name,
+                pool_name=pool,
+                volume_name=volume_name,
+            )
+
+            snapshot_body = Snapshot(location=vol.location)
+
+            poller = self._client.snapshots.begin_create(
+                resource_group_name=self.resource_group,
+                account_name=self.account_name,
+                pool_name=pool,
+                volume_name=volume_name,
+                snapshot_name=snapshot_name,
+                body=snapshot_body,
+            )
+            result = poller.result()  # Wait for completion
+
+            return OperationResult(
+                success=True,
+                operation="create_snapshot",
+                resource_name=snapshot_name,
+                details=(
+                    f"Snapshot '{snapshot_name}' created on volume '{volume_name}'. "
+                    f"Provisioning state: {result.provisioning_state}. "
+                    f"Created at: {result.created}. "
+                    f"ANF snapshots are instant and have zero performance impact."
+                ),
+            )
+        except Exception as e:
+            logger.error("Failed to create snapshot %s: %s", snapshot_name, str(e))
+            return OperationResult(
+                success=False,
+                operation="create_snapshot",
+                resource_name=snapshot_name,
+                details="",
+                error=str(e),
+            )
+
+    def list_snapshots(
+        self, volume_name: str, pool_name: Optional[str] = None
+    ) -> list[SnapshotInfo]:
+        """
+        List all snapshots for a volume.
+
+        Args:
+            volume_name: Name of the volume.
+            pool_name: Capacity pool name. Uses default if not specified.
+
+        Returns:
+            List of SnapshotInfo objects.
+        """
+        pool = pool_name or self.default_pool_name
+        logger.info("Listing snapshots for volume '%s'", volume_name)
+
+        snapshots = []
+        for snap in self._client.snapshots.list(
+            resource_group_name=self.resource_group,
+            account_name=self.account_name,
+            pool_name=pool,
+            volume_name=volume_name,
+        ):
+            snapshots.append(SnapshotInfo.from_sdk(snap, volume_name))
+
+        logger.info("Found %d snapshots for volume %s", len(snapshots), volume_name)
+        return snapshots
+
+    def delete_snapshot(
+        self,
+        volume_name: str,
+        snapshot_name: str,
+        pool_name: Optional[str] = None,
+    ) -> OperationResult:
+        """
+        Delete a snapshot from a volume.
+
+        Args:
+            volume_name: Name of the volume.
+            snapshot_name: Name of the snapshot to delete.
+            pool_name: Capacity pool name. Uses default if not specified.
+
+        Returns:
+            OperationResult indicating success/failure.
+        """
+        pool = pool_name or self.default_pool_name
+        logger.info("Deleting snapshot '%s' from volume '%s'", snapshot_name, volume_name)
+
+        try:
+            poller = self._client.snapshots.begin_delete(
+                resource_group_name=self.resource_group,
+                account_name=self.account_name,
+                pool_name=pool,
+                volume_name=volume_name,
+                snapshot_name=snapshot_name,
+            )
+            poller.result()
+
+            return OperationResult(
+                success=True,
+                operation="delete_snapshot",
+                resource_name=snapshot_name,
+                details=f"Snapshot '{snapshot_name}' deleted from volume '{volume_name}'.",
+            )
+        except Exception as e:
+            logger.error("Failed to delete snapshot %s: %s", snapshot_name, str(e))
+            return OperationResult(
+                success=False,
+                operation="delete_snapshot",
+                resource_name=snapshot_name,
+                details="",
+                error=str(e),
+            )
+
+    # ── Account Operations ────────────────────────────────────────────
+
+    def get_account_info(self) -> AccountInfo:
+        """
+        Get information about the ANF account.
+
+        Returns:
+            AccountInfo object.
+        """
+        logger.info("Getting account info: %s", self.account_name)
+
+        account = self._client.accounts.get(
+            resource_group_name=self.resource_group,
+            account_name=self.account_name,
+        )
+
+        ad_count = len(account.active_directories) if account.active_directories else 0
+
+        return AccountInfo(
+            name=account.name,
+            resource_group=self.resource_group,
+            location=account.location,
+            provisioning_state=account.provisioning_state or "Unknown",
+            active_directories=ad_count,
+        )

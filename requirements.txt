@@ -1,0 +1,23 @@
+# Azure AI Foundry Agent Service (GA stable)
+azure-ai-projects==1.0.0
+azure-ai-agents>=1.1.0
+
+# Azure NetApp Files Management SDK
+azure-mgmt-netapp>=14.0.0
+
+# Azure Authentication
+azure-identity>=1.17.0
+
+# Data validation
+pydantic>=2.0
+
+# Environment variables
+python-dotenv>=1.0.0
+
+# OpenTelemetry tracing (optional — for production observability)
+opentelemetry-sdk>=1.25.0
+azure-core-tracing-opentelemetry>=1.0.0b11
+
+# Testing
+pytest>=8.0
+pytest-asyncio>=0.23.0

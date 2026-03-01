@@ -1,0 +1,126 @@
+[build-system]
+requires = ["setuptools>=69.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "anf-foundry-selfops"
+version = "0.1.0"
+description = "Azure AI Foundry Agents managing Azure NetApp Files — Agentic Infrastructure SelfOps"
+readme = "README.md"
+license = {text = "MIT"}
+requires-python = ">=3.11"
+authors = [
+    {name = "ANF AI Enablement"},
+]
+keywords = ["azure", "netapp", "ai-foundry", "agents", "selfops", "function-calling"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Software Development :: Libraries",
+]
+
+dependencies = [
+    # Azure AI Foundry Agent Service (GA stable)
+    "azure-ai-projects==1.0.0",
+    "azure-ai-agents>=1.1.0",
+    # Azure NetApp Files Management SDK
+    "azure-mgmt-netapp>=14.0.0",
+    # Azure Authentication
+    "azure-identity>=1.17.0",
+    # Azure Core (error types, retry policies)
+    "azure-core>=1.30.0",
+    # Data validation + settings
+    "pydantic>=2.0",
+    "pydantic-settings>=2.0",
+    # Environment variables
+    "python-dotenv>=1.0.0",
+    # Resilience
+    "tenacity>=8.2.0",
+    # Structured logging
+    "structlog>=24.0.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    # Testing
+    "pytest>=8.0",
+    "pytest-asyncio>=0.23.0",
+    "pytest-cov>=5.0",
+    "pytest-mock>=3.12",
+    # Linting + formatting
+    "ruff>=0.5.0",
+    # Type checking
+    "mypy>=1.10",
+    # Pre-commit hooks
+    "pre-commit>=3.7",
+]
+observability = [
+    # OpenTelemetry tracing
+    "opentelemetry-sdk>=1.25.0",
+    "opentelemetry-exporter-otlp>=1.25.0",
+    "azure-core-tracing-opentelemetry>=1.0.0b11",
+    # Prometheus metrics
+    "prometheus-client>=0.20.0",
+]
+api = [
+    # Health check / webhook endpoint
+    "fastapi>=0.111.0",
+    "uvicorn[standard]>=0.30.0",
+]
+
+[project.scripts]
+anf-selfops = "src.main:main"
+
+[tool.setuptools.packages.find]
+include = ["src*"]
+
+# ── Ruff ──────────────────────────────────────────────────────────
+
+[tool.ruff]
+target-version = "py311"
+line-length = 110
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = [
+    "E",    # pycodestyle errors
+    "W",    # pycodestyle warnings
+    "F",    # pyflakes
+    "I",    # isort
+    "N",    # pep8-naming
+    "UP",   # pyupgrade
+    "B",    # flake8-bugbear
+    "SIM",  # flake8-simplify
+    "RUF",  # ruff-specific rules
+]
+ignore = [
+    "E501",  # line too long (handled by formatter)
+]
+
+[tool.ruff.lint.isort]
+known-first-party = ["src"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+
+# ── Mypy ──────────────────────────────────────────────────────────
+
+[tool.mypy]
+python_version = "3.11"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
+ignore_missing_imports = true
+
+# ── Pytest ────────────────────────────────────────────────────────
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = [
+    "integration: requires Azure credentials and live resources",
+]
+addopts = "-v --tb=short"
