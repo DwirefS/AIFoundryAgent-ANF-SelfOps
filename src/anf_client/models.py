@@ -96,3 +96,28 @@ class OperationResult(BaseModel):
     resource_name: str = Field(description="Name of the resource affected")
     details: str = Field(description="Human-readable result details")
     error: Optional[str] = Field(None, description="Error message if operation failed")
+
+
+class CapacityPoolInfo(BaseModel):
+    """Represents an Azure NetApp Files capacity pool."""
+
+    name: str = Field(description="Pool name")
+    resource_group: str = Field(description="Resource group name")
+    location: str = Field(description="Azure region")
+    service_level: str = Field(description="Service level: Standard, Premium, or Ultra")
+    size_in_bytes: int = Field(description="Provisioned size in bytes")
+    size_in_gib: float = Field(description="Provisioned size in GiB")
+    provisioning_state: str = Field(description="Current provisioning state")
+
+    @classmethod
+    def from_sdk(cls, pool, resource_group: str) -> CapacityPoolInfo:
+        """Create CapacityPoolInfo from azure-mgmt-netapp CapacityPool object."""
+        return cls(
+            name=pool.name.split("/")[-1] if "/" in pool.name else pool.name,
+            resource_group=resource_group,
+            location=pool.location,
+            service_level=pool.service_level or "Unknown",
+            size_in_bytes=pool.size or 0,
+            size_in_gib=round((pool.size or 0) / (1024**3), 2),
+            provisioning_state=pool.provisioning_state or "Unknown",
+        )

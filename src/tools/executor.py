@@ -18,11 +18,14 @@ logger = logging.getLogger(__name__)
 
 # Map of function names → ANFClient methods
 FUNCTION_REGISTRY = {
+    "list_capacity_pools",
     "list_volumes",
     "get_volume",
+    "delete_volume",
     "create_snapshot",
     "list_snapshots",
     "delete_snapshot",
+    "revert_volume",
     "resize_volume",
     "get_account_info",
 }
@@ -69,22 +72,33 @@ class ToolExecutor:
             return self._serialize(result)
         except Exception as e:
             logger.error("Tool execution failed: %s — %s", function_name, str(e))
-            return json.dumps({
-                "error": str(e),
-                "function": function_name,
-                "arguments": arguments,
-            })
+            return json.dumps(
+                {
+                    "error": str(e),
+                    "function": function_name,
+                    "arguments": arguments,
+                }
+            )
 
     def _dispatch(self, function_name: str, args: dict[str, Any]) -> Any:
         """Route the function call to the appropriate ANFClient method."""
 
-        if function_name == "list_volumes":
+        if function_name == "list_capacity_pools":
+            return self.anf_client.list_capacity_pools()
+
+        elif function_name == "list_volumes":
             return self.anf_client.list_volumes(
                 pool_name=args.get("pool_name"),
             )
 
         elif function_name == "get_volume":
             return self.anf_client.get_volume(
+                volume_name=args["volume_name"],
+                pool_name=args.get("pool_name"),
+            )
+
+        elif function_name == "delete_volume":
+            return self.anf_client.delete_volume(
                 volume_name=args["volume_name"],
                 pool_name=args.get("pool_name"),
             )
@@ -106,6 +120,13 @@ class ToolExecutor:
             return self.anf_client.delete_snapshot(
                 volume_name=args["volume_name"],
                 snapshot_name=args["snapshot_name"],
+                pool_name=args.get("pool_name"),
+            )
+
+        elif function_name == "revert_volume":
+            return self.anf_client.revert_volume(
+                volume_name=args["volume_name"],
+                snapshot_id=args["snapshot_id"],
                 pool_name=args.get("pool_name"),
             )
 

@@ -14,6 +14,21 @@ from azure.ai.agents.models import FunctionTool, ToolSet
 
 # ── Individual Tool Definitions ──────────────────────────────────────
 
+list_capacity_pools_tool = FunctionTool(
+    name="list_capacity_pools",
+    description=(
+        "List all Azure NetApp Files capacity pools in the account. "
+        "Returns pool names, sizes, service levels, and provisioning states. "
+        "Use this when the user asks to see capacity pools or check overall account capacity."
+    ),
+    parameters={
+        "type": "object",
+        "properties": {},
+        "required": [],
+        "additionalProperties": False,
+    },
+)
+
 list_volumes_tool = FunctionTool(
     name="list_volumes",
     description=(
@@ -26,10 +41,7 @@ list_volumes_tool = FunctionTool(
         "properties": {
             "pool_name": {
                 "type": "string",
-                "description": (
-                    "Name of the ANF capacity pool. "
-                    "If not specified, the default pool is used."
-                ),
+                "description": ("Name of the ANF capacity pool. If not specified, the default pool is used."),
             },
         },
         "required": [],
@@ -57,6 +69,58 @@ get_volume_tool = FunctionTool(
             },
         },
         "required": ["volume_name"],
+        "additionalProperties": False,
+    },
+)
+
+delete_volume_tool = FunctionTool(
+    name="delete_volume",
+    description=(
+        "Delete an Azure NetApp Files volume. "
+        "This is a destructive operation - the volume and all its data will be permanently removed. "
+        "Use this when the user explicitly asks to delete or remove a volume."
+    ),
+    parameters={
+        "type": "object",
+        "properties": {
+            "volume_name": {
+                "type": "string",
+                "description": "Name of the ANF volume to delete.",
+            },
+            "pool_name": {
+                "type": "string",
+                "description": "Capacity pool name. Uses default if not specified.",
+            },
+        },
+        "required": ["volume_name"],
+        "additionalProperties": False,
+    },
+)
+
+revert_volume_tool = FunctionTool(
+    name="revert_volume",
+    description=(
+        "Revert an Azure NetApp Files volume to one of its previous snapshots. "
+        "This is a fast revert that replaces the active volume data with the snapshot data. "
+        "Use this when the user asks to restore a volume from a snapshot or revert changes."
+    ),
+    parameters={
+        "type": "object",
+        "properties": {
+            "volume_name": {
+                "type": "string",
+                "description": "Name of the ANF volume to revert.",
+            },
+            "snapshot_id": {
+                "type": "string",
+                "description": "The exact snapshot ID (resource ID) to revert the volume to.",
+            },
+            "pool_name": {
+                "type": "string",
+                "description": "Capacity pool name. Uses default if not specified.",
+            },
+        },
+        "required": ["volume_name", "snapshot_id"],
         "additionalProperties": False,
     },
 )
@@ -196,11 +260,14 @@ get_account_info_tool = FunctionTool(
 # ── Aggregated ToolSet ───────────────────────────────────────────────
 
 ALL_TOOLS = [
+    list_capacity_pools_tool,
     list_volumes_tool,
     get_volume_tool,
+    delete_volume_tool,
     create_snapshot_tool,
     list_snapshots_tool,
     delete_snapshot_tool,
+    revert_volume_tool,
     resize_volume_tool,
     get_account_info_tool,
 ]

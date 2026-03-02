@@ -12,7 +12,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from src.anf_client.models import OperationResult, SnapshotInfo, VolumeInfo
+from src.anf_client.models import CapacityPoolInfo, OperationResult, SnapshotInfo, VolumeInfo
 from src.tools.executor import ToolExecutor
 
 
@@ -79,6 +79,35 @@ def mock_anf_client():
         details="Volume 'risk-analytics' resized from 2048.0 GiB to 3072 GiB.",
     )
 
+    # Mock list_capacity_pools
+    client.list_capacity_pools.return_value = [
+        CapacityPoolInfo(
+            name="pool-premium",
+            resource_group="rg-prod",
+            location="eastus2",
+            service_level="Premium",
+            size_in_bytes=4398046511104,
+            size_in_gib=4096.0,
+            provisioning_state="Succeeded",
+        )
+    ]
+
+    # Mock delete_volume
+    client.delete_volume.return_value = OperationResult(
+        success=True,
+        operation="delete_volume",
+        resource_name="trading-data",
+        details="Volume 'trading-data' deleted successfully.",
+    )
+
+    # Mock revert_volume
+    client.revert_volume.return_value = OperationResult(
+        success=True,
+        operation="revert_volume",
+        resource_name="trading-data",
+        details="Volume 'trading-data' reverted successfully to snapshot.",
+    )
+
     return client
 
 
@@ -106,10 +135,13 @@ class TestToolExecutor:
         mock_anf_client.list_volumes.assert_called_once_with(pool_name="pool-ultra")
 
     def test_create_snapshot(self, executor, mock_anf_client):
-        result = executor.execute("create_snapshot", {
-            "volume_name": "trading-data",
-            "snapshot_name": "pre-batch-20250126",
-        })
+        result = executor.execute(
+            "create_snapshot",
+            {
+                "volume_name": "trading-data",
+                "snapshot_name": "pre-batch-20250126",
+            },
+        )
         parsed = json.loads(result)
 
         assert parsed["success"] is True
@@ -130,14 +162,55 @@ class TestToolExecutor:
         assert parsed[0]["name"] == "pre-batch-20250126"
 
     def test_resize_volume(self, executor, mock_anf_client):
-        result = executor.execute("resize_volume", {
-            "volume_name": "risk-analytics",
-            "new_size_gib": 3072,
-        })
+        result = executor.execute(
+            "resize_volume",
+            {
+                "volume_name": "risk-analytics",
+                "new_size_gib": 3072,
+            },
+        )
         parsed = json.loads(result)
 
         assert parsed["success"] is True
         assert parsed["operation"] == "resize_volume"
+
+    def test_list_capacity_pools(self, executor, mock_anf_client):
+        result = executor.execute("list_capacity_pools", {})
+        parsed = json.loads(result)
+
+        assert isinstance(parsed, list)
+        assert len(parsed) == 1
+        assert parsed[0]["name"] == "pool-premium"
+        mock_anf_client.list_capacity_pools.assert_called_once()
+
+    def test_delete_volume(self, executor, mock_anf_client):
+        result = executor.execute(
+            "delete_volume",
+            {
+                "volume_name": "trading-data",
+            },
+        )
+        parsed = json.loads(result)
+
+        assert parsed["success"] is True
+        assert parsed["operation"] == "delete_volume"
+        mock_anf_client.delete_volume.assert_called_once_with(volume_name="trading-data", pool_name=None)
+
+    def test_revert_volume(self, executor, mock_anf_client):
+        result = executor.execute(
+            "revert_volume",
+            {
+                "volume_name": "trading-data",
+                "snapshot_id": "snap-1234",
+            },
+        )
+        parsed = json.loads(result)
+
+        assert parsed["success"] is True
+        assert parsed["operation"] == "revert_volume"
+        mock_anf_client.revert_volume.assert_called_once_with(
+            volume_name="trading-data", snapshot_id="snap-1234", pool_name=None
+        )
 
     def test_unknown_function(self, executor):
         result = executor.execute("nonexistent_function", {})

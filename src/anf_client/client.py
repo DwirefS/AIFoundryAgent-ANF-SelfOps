@@ -20,7 +20,7 @@ from azure.identity import DefaultAzureCredential
 from azure.mgmt.netapp import NetAppManagementClient
 from azure.mgmt.netapp.models import Snapshot, VolumePatch
 
-from .models import AccountInfo, OperationResult, SnapshotInfo, VolumeInfo
+from .models import AccountInfo, CapacityPoolInfo, OperationResult, SnapshotInfo, VolumeInfo
 
 logger = logging.getLogger(__name__)
 
@@ -61,6 +61,27 @@ class ANFClient:
             resource_group,
         )
 
+    # ── Pool Operations ───────────────────────────────────────────────
+
+    def list_capacity_pools(self) -> list[CapacityPoolInfo]:
+        """
+        List all capacity pools in the ANF account.
+
+        Returns:
+            List of CapacityPoolInfo objects.
+        """
+        logger.info("Listing capacity pools: rg=%s, account=%s", self.resource_group, self.account_name)
+
+        pools = []
+        for pool in self._client.pools.list(
+            resource_group_name=self.resource_group,
+            account_name=self.account_name,
+        ):
+            pools.append(CapacityPoolInfo.from_sdk(pool, self.resource_group))
+
+        logger.info("Found %d capacity pools", len(pools))
+        return pools
+
     # ── Volume Operations ─────────────────────────────────────────────
 
     def list_volumes(self, pool_name: Optional[str] = None) -> list[VolumeInfo]:
@@ -74,7 +95,9 @@ class ANFClient:
             List of VolumeInfo objects.
         """
         pool = pool_name or self.default_pool_name
-        logger.info("Listing volumes: rg=%s, account=%s, pool=%s", self.resource_group, self.account_name, pool)
+        logger.info(
+            "Listing volumes: rg=%s, account=%s, pool=%s", self.resource_group, self.account_name, pool
+        )
 
         volumes = []
         for vol in self._client.volumes.list(
@@ -82,9 +105,7 @@ class ANFClient:
             account_name=self.account_name,
             pool_name=pool,
         ):
-            volumes.append(
-                VolumeInfo.from_sdk(vol, self.resource_group, self.account_name, pool)
-            )
+            volumes.append(VolumeInfo.from_sdk(vol, self.resource_group, self.account_name, pool))
 
         logger.info("Found %d volumes in pool %s", len(volumes), pool)
         return volumes
@@ -110,6 +131,88 @@ class ANFClient:
             volume_name=volume_name,
         )
         return VolumeInfo.from_sdk(vol, self.resource_group, self.account_name, pool)
+
+    def delete_volume(self, volume_name: str, pool_name: Optional[str] = None) -> OperationResult:
+        """
+        Delete an ANF volume. This is a destructive operation.
+
+        Args:
+            volume_name: Name of the volume to delete.
+            pool_name: Capacity pool name. Uses default if not specified.
+
+        Returns:
+            OperationResult indicating success/failure.
+        """
+        pool = pool_name or self.default_pool_name
+        logger.info("Deleting volume '%s' from pool '%s'", volume_name, pool)
+
+        try:
+            poller = self._client.volumes.begin_delete(
+                resource_group_name=self.resource_group,
+                account_name=self.account_name,
+                pool_name=pool,
+                volume_name=volume_name,
+            )
+            poller.result()  # Wait for completion
+
+            return OperationResult(
+                success=True,
+                operation="delete_volume",
+                resource_name=volume_name,
+                details=f"Volume '{volume_name}' deleted successfully.",
+            )
+        except Exception as e:
+            logger.error("Failed to delete volume %s: %s", volume_name, str(e))
+            return OperationResult(
+                success=False,
+                operation="delete_volume",
+                resource_name=volume_name,
+                details="",
+                error=str(e),
+            )
+
+    def revert_volume(
+        self, volume_name: str, snapshot_id: str, pool_name: Optional[str] = None
+    ) -> OperationResult:
+        """
+        Revert a volume to one of its snapshots.
+
+        Args:
+            volume_name: Name of the volume to revert.
+            snapshot_id: The resource ID of the snapshot to revert to.
+            pool_name: Capacity pool name. Uses default if not specified.
+
+        Returns:
+            OperationResult indicating success/failure.
+        """
+        pool = pool_name or self.default_pool_name
+        logger.info("Reverting volume '%s' to snapshot ID '%s'", volume_name, snapshot_id)
+
+        try:
+            poller = self._client.volumes.begin_revert(
+                resource_group_name=self.resource_group,
+                account_name=self.account_name,
+                pool_name=pool,
+                volume_name=volume_name,
+                body={"snapshotId": snapshot_id},
+            )
+            poller.result()  # Wait for completion
+
+            return OperationResult(
+                success=True,
+                operation="revert_volume",
+                resource_name=volume_name,
+                details=f"Volume '{volume_name}' reverted successfully to snapshot.",
+            )
+        except Exception as e:
+            logger.error("Failed to revert volume %s: %s", volume_name, str(e))
+            return OperationResult(
+                success=False,
+                operation="revert_volume",
+                resource_name=volume_name,
+                details="",
+                error=str(e),
+            )
 
     def resize_volume(
         self, volume_name: str, new_size_gib: int, pool_name: Optional[str] = None
@@ -247,9 +350,7 @@ class ANFClient:
                 error=str(e),
             )
 
-    def list_snapshots(
-        self, volume_name: str, pool_name: Optional[str] = None
-    ) -> list[SnapshotInfo]:
+    def list_snapshots(self, volume_name: str, pool_name: Optional[str] = None) -> list[SnapshotInfo]:
         """
         List all snapshots for a volume.
 

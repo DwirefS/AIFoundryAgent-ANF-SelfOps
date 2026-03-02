@@ -1,8 +1,8 @@
-# ANF Foundry SelfOps Accelerator
+# ANF Foundry AI Storage Ops (SelfOps) Accelerator
 
 > **Azure AI Foundry Agents × Azure NetApp Files — Agentic Infrastructure Self-Operations**
 
-This accelerator demonstrates how Azure AI Foundry Agents can autonomously manage Azure NetApp Files (ANF) infrastructure through function calling. An AI agent interprets natural-language requests and executes ANF control-plane operations — snapshots, volume listing, capacity resizing, and cloning — creating a **SelfOps** pattern where AI agents manage their own data infrastructure.
+This accelerator demonstrates how Azure AI Foundry Agents can autonomously manage Azure NetApp Files (ANF) infrastructure through function calling. An AI agent interprets natural-language requests and executes ANF control-plane operations — snapshots, volume listing, capacity resizing, and cloning — creating a **AI Storage Ops (SelfOps)** pattern where AI agents manage their own data infrastructure.
 
 ---
 
@@ -22,7 +22,7 @@ This accelerator demonstrates how Azure AI Foundry Agents can autonomously manag
 │                    Azure AI Foundry Agent                             │
 │                                                                      │
 │   Model: GPT-4o (or GPT-4.1)                                        │
-│   Instructions: ANF SelfOps specialist                               │
+│   Instructions: ANF AI Storage Ops (SelfOps) specialist                               │
 │   Tools: Function Calling (ANF operations)                           │
 │                                                                      │
 │   ┌────────────────────────────────────────────────────────────┐     │
@@ -65,9 +65,9 @@ This accelerator demonstrates how Azure AI Foundry Agents can autonomously manag
 
 ## Key Concepts
 
-### What is SelfOps?
+### What is AI Storage Ops (SelfOps)?
 
-SelfOps is a pattern where AI agents autonomously manage the infrastructure and data lifecycle that supports their own workloads. Instead of human operators manually creating snapshots, resizing volumes, or managing capacity, the agent handles these operations through natural-language commands or automated triggers.
+AI Storage Ops (SelfOps) is a pattern where AI agents autonomously manage the infrastructure and data lifecycle that supports their own workloads. Instead of human operators manually creating snapshots, resizing volumes, or managing capacity, the agent handles these operations through natural-language commands or automated triggers.
 
 **Use Cases for Capital Markets / Financial Services:**
 
@@ -191,7 +191,7 @@ python -m src.main
 You'll get an interactive prompt where you can issue natural-language commands:
 
 ```
-ANF SelfOps Agent Ready. Type your request (or 'quit' to exit):
+ANF AI Storage Ops (SelfOps) Agent Ready. Type your request (or 'quit' to exit):
 
 > List all volumes in the production pool
 Agent: I found 3 volumes in the 'production' capacity pool:
@@ -255,4 +255,4 @@ MIT — see [LICENSE](LICENSE)
 |------|----------|
 | `anf-onelake-fabric-agents` | ANF → Object REST API → OneLake S3 Shortcut → Fabric Data Agents |
 | `anf-ai-search-rag` | ANF → Object REST API → OneLake S3 Shortcut → Azure AI Search → RAG |
-| **`anf-foundry-selfops`** | **Foundry Agents → ANF Control Plane → SelfOps** (this repo) |
+| **`anf-foundry-selfops`** | **Foundry Agents → ANF Control Plane → AI Storage Ops (SelfOps)** (this repo) |
