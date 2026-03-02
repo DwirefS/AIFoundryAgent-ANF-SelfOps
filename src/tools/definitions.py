@@ -10,11 +10,11 @@ Reference:
   https://learn.microsoft.com/en-us/azure/ai-foundry/agents/how-to/tools-classic/function-calling
 """
 
-from azure.ai.agents.models import FunctionTool, ToolSet
+from azure.ai.agents.models import FunctionDefinition, ToolSet
 
 # ── Individual Tool Definitions ──────────────────────────────────────
 
-list_capacity_pools_tool = FunctionTool(
+list_capacity_pools_tool = FunctionDefinition(
     name="list_capacity_pools",
     description=(
         "List all Azure NetApp Files capacity pools in the account. "
@@ -29,7 +29,7 @@ list_capacity_pools_tool = FunctionTool(
     },
 )
 
-list_volumes_tool = FunctionTool(
+list_volumes_tool = FunctionDefinition(
     name="list_volumes",
     description=(
         "List all Azure NetApp Files volumes in a capacity pool. "
@@ -49,7 +49,7 @@ list_volumes_tool = FunctionTool(
     },
 )
 
-get_volume_tool = FunctionTool(
+get_volume_tool = FunctionDefinition(
     name="get_volume",
     description=(
         "Get detailed information about a specific Azure NetApp Files volume, "
@@ -73,7 +73,7 @@ get_volume_tool = FunctionTool(
     },
 )
 
-delete_volume_tool = FunctionTool(
+delete_volume_tool = FunctionDefinition(
     name="delete_volume",
     description=(
         "Delete an Azure NetApp Files volume. "
@@ -97,7 +97,7 @@ delete_volume_tool = FunctionTool(
     },
 )
 
-revert_volume_tool = FunctionTool(
+revert_volume_tool = FunctionDefinition(
     name="revert_volume",
     description=(
         "Revert an Azure NetApp Files volume to one of its previous snapshots. "
@@ -125,7 +125,7 @@ revert_volume_tool = FunctionTool(
     },
 )
 
-create_snapshot_tool = FunctionTool(
+create_snapshot_tool = FunctionDefinition(
     name="create_snapshot",
     description=(
         "Create a point-in-time snapshot of an Azure NetApp Files volume. "
@@ -157,7 +157,7 @@ create_snapshot_tool = FunctionTool(
     },
 )
 
-list_snapshots_tool = FunctionTool(
+list_snapshots_tool = FunctionDefinition(
     name="list_snapshots",
     description=(
         "List all snapshots for an Azure NetApp Files volume. "
@@ -181,7 +181,7 @@ list_snapshots_tool = FunctionTool(
     },
 )
 
-delete_snapshot_tool = FunctionTool(
+delete_snapshot_tool = FunctionDefinition(
     name="delete_snapshot",
     description=(
         "Delete a snapshot from an Azure NetApp Files volume. "
@@ -209,7 +209,7 @@ delete_snapshot_tool = FunctionTool(
     },
 )
 
-resize_volume_tool = FunctionTool(
+resize_volume_tool = FunctionDefinition(
     name="resize_volume",
     description=(
         "Resize an Azure NetApp Files volume. ANF supports online resize — "
@@ -241,7 +241,7 @@ resize_volume_tool = FunctionTool(
     },
 )
 
-get_account_info_tool = FunctionTool(
+get_account_info_tool = FunctionDefinition(
     name="get_account_info",
     description=(
         "Get information about the Azure NetApp Files account, including "

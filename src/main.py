@@ -80,8 +80,6 @@ def run_interactive(agent: ANFSelfOpsAgent) -> None:
     print('  • "Show me the account info"')
     print('\nType "quit" or "exit" to stop.\n')
 
-    agent.create_thread()
-
     while True:
         try:
             user_input = input("You: ").strip()

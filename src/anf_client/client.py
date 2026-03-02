@@ -255,21 +255,33 @@ class ANFClient:
             old_size_gib = round(old_size_bytes / (1024**3), 2)
 
             # Execute resize (long-running operation)
+            # azure-mgmt-netapp 14.0.x has a _deserialize_model bug with VolumePatch.
+            # Pass a raw dict instead of VolumePatch to avoid the serialization issue,
+            # and use poller.wait() instead of poller.result() to skip deserialization.
             poller = self._client.volumes.begin_update(
                 resource_group_name=self.resource_group,
                 account_name=self.account_name,
                 pool_name=pool,
                 volume_name=volume_name,
-                body=VolumePatch(usage_threshold=new_size_bytes),
+                body={"properties": {"usageThreshold": new_size_bytes}},
             )
-            poller.result()  # Wait for completion
+            poller.wait()
+
+            # Verify the resize by re-fetching the volume
+            updated = self._client.volumes.get(
+                resource_group_name=self.resource_group,
+                account_name=self.account_name,
+                pool_name=pool,
+                volume_name=volume_name,
+            )
+            actual_size_gib = round((updated.usage_threshold or 0) / (1024**3), 2)
 
             return OperationResult(
                 success=True,
                 operation="resize_volume",
                 resource_name=volume_name,
                 details=(
-                    f"Volume '{volume_name}' resized from {old_size_gib} GiB to {new_size_gib} GiB. "
+                    f"Volume '{volume_name}' resized from {old_size_gib} GiB to {actual_size_gib} GiB. "
                     f"ANF volume resize is online — no downtime required."
                 ),
             )
