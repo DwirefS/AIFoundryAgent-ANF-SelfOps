@@ -30,3 +30,6 @@ htmlcov/
 # OS Data
 .DS_Store
 Thumbs.db
+
+# Lab testing notes (private)
+LabLessons.md

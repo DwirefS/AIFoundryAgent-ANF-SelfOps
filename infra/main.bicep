@@ -41,9 +41,6 @@ param vnetAddressPrefix string = '10.0.0.0/16'
 @description('ANF delegated subnet prefix')
 param anfSubnetPrefix string = '10.0.1.0/24'
 
-@description('AI model deployment name')
-param modelDeploymentName string = 'gpt-4o'
-
 // ── Variables ───────────────────────────────────────────────
 
 var uniqueSuffix = uniqueString(resourceGroup().id)
@@ -117,7 +114,7 @@ resource volume 'Microsoft.NetApp/netAppAccounts/capacityPools/volumes@2024-07-0
           ruleIndex: 1
           unixReadOnly: false
           unixReadWrite: true
-          allowedClients: '0.0.0.0/0'
+          allowedClients: '10.0.0.0/16'
           nfsv41: true
           nfsv3: false
         }

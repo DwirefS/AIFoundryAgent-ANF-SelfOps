@@ -12,10 +12,7 @@
       "value": 1024
     },
     "serviceLevel": {
-      "value": "Premium"
-    },
-    "modelDeploymentName": {
-      "value": "gpt-4o"
+      "value": "Standard"
     }
   }
 }

@@ -28,12 +28,22 @@ echo "======================================================"
 az group create --name "$RG_NAME" --location "$LOCATION" -o none
 
 echo "======================================================"
+echo "1.5 Registering Resource Providers"
+echo "======================================================"
+az provider register --namespace Microsoft.NetApp --wait
+az provider register --namespace Microsoft.MachineLearningServices --wait
+az provider register --namespace Microsoft.CognitiveServices --wait
+
+echo "======================================================"
 echo "2. Deploying Base Infrastructure (VNet, ANF, Identity) via Bicep"
 echo "======================================================"
-az deployment group create \
+DEPLOYMENT_OUTPUT=$(az deployment group create \
     --resource-group "$RG_NAME" \
     --template-file infra/main.bicep \
-    --parameters infra/parameters.json -o none
+    --parameters infra/parameters.json -o json)
+
+BICEP_ANF_ACCOUNT_NAME=$(echo "$DEPLOYMENT_OUTPUT" | jq -r '.properties.outputs.anfAccountName.value')
+BICEP_ANF_POOL_NAME=$(echo "$DEPLOYMENT_OUTPUT" | jq -r '.properties.outputs.poolName.value')
 
 echo "======================================================"
 echo "3. Creating Azure OpenAI Resource: $AOAI_NAME"
@@ -78,23 +88,34 @@ echo "======================================================"
 echo "5. Connecting Azure OpenAI to AI Foundry Hub"
 echo "======================================================"
 AOAI_ID="/subscriptions/$SUB_ID/resourceGroups/$RG_NAME/providers/Microsoft.CognitiveServices/accounts/$AOAI_NAME"
-az ml connection create \
+# Attempt CLI connection creation first
+if ! az ml connection create \
     --type azure_open_ai \
     --name "aoai-connection" \
     --workspace-name "$HUB_NAME" \
     --resource-group "$RG_NAME" \
-    --set target="$AOAI_ID" -o none
+    --set target="$AOAI_ID" -o none 2>/dev/null; then
+    echo "CLI connection failed, falling back to YAML..."
+    cat << EOF > aoai-connection.yml
+name: aoai-connection
+type: azure_open_ai
+target: $AOAI_ID
+auth_type: aad
+EOF
+    az ml connection create --file aoai-connection.yml --workspace-name "$HUB_NAME" --resource-group "$RG_NAME" -o none
+    rm aoai-connection.yml
+fi
 
 echo "======================================================"
 echo "6. Outputting Recommended .env Configuration"
 echo "======================================================"
 cat << EOF > .env.generated
 AZURE_SUBSCRIPTION_ID="$SUB_ID"
-AZURE_RESOURCE_GROUP="$RG_NAME"
-ANF_ACCOUNT_NAME="anf-selfops-account"
-ANF_POOL_NAME="anf-selfops-pool"
-AZURE_OPENAI_DEPLOYMENT="gpt-4o"
-AZURE_AI_PROJECT_CONNECTION_STRING="$(az ml workspace show -n $PROJECT_NAME -g $RG_NAME --query "discoveryUrl" -o tsv)"
+ANF_RESOURCE_GROUP="$RG_NAME"
+ANF_ACCOUNT_NAME="$BICEP_ANF_ACCOUNT_NAME"
+ANF_POOL_NAME="$BICEP_ANF_POOL_NAME"
+MODEL_DEPLOYMENT_NAME="gpt-4o"
+AZURE_AI_PROJECT_ENDPOINT="\$(az ml workspace show -n \$PROJECT_NAME -g \$RG_NAME --query "discoveryUrl" -o tsv | sed 's/discovery/openai\/v1/')"
 EOF
 
 echo "Deployment complete! Your configuration has been saved to .env.generated"
